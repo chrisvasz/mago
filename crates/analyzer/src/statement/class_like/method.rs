@@ -143,6 +143,7 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for Method<'arena> {
             );
 
             missing_type_hints::check_imprecise_parameter_type_hint(context, method_metadata, parameter, i);
+            missing_type_hints::check_parameter_missing_template_parameters(context, method_metadata, i);
         }
 
         missing_type_hints::check_return_type_hint(
@@ -160,6 +161,8 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for Method<'arena> {
             self.name.value,
             self.return_type_hint.as_ref(),
         );
+
+        missing_type_hints::check_return_missing_template_parameters(context, method_metadata, self.name.value);
 
         Ok(())
     }

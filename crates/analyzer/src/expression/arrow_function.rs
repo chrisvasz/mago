@@ -120,6 +120,7 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for ArrowFunction<'arena> {
         // Check for imprecise type hints (bare `array` or `iterable`)
         for (i, parameter) in self.parameter_list.parameters.iter().enumerate() {
             missing_type_hints::check_imprecise_parameter_type_hint(context, function_metadata, parameter, i);
+            missing_type_hints::check_parameter_missing_template_parameters(context, function_metadata, i);
         }
 
         missing_type_hints::check_imprecise_return_type_hint(
@@ -128,6 +129,8 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for ArrowFunction<'arena> {
             b"arrow function",
             self.return_type_hint.as_ref(),
         );
+
+        missing_type_hints::check_return_missing_template_parameters(context, function_metadata, b"arrow function");
 
         let inferred_parameter_types = artifacts.inferred_parameter_types.take();
         let inner_artifacts = analyze_function_like(

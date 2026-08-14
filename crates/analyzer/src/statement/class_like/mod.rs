@@ -1057,6 +1057,7 @@ where
 
                 let prop_meta = first_property_name.and_then(|name| class_like_metadata.properties.get(&name));
                 missing_type_hints::check_imprecise_property_type_hint(context, property, prop_meta);
+                missing_type_hints::check_property_missing_template_parameters(context, prop_meta);
 
                 let property_names: Vec<Word> = match property {
                     Property::Plain(plain) => plain.items.iter().map(|item| word(item.variable().name)).collect(),

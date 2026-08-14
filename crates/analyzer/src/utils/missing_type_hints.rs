@@ -3,6 +3,12 @@ use mago_codex::metadata::class_like::ClassLikeMetadata;
 use mago_codex::metadata::function_like::FunctionLikeKind;
 use mago_codex::metadata::function_like::FunctionLikeMetadata;
 use mago_codex::metadata::property::PropertyMetadata;
+use mago_codex::metadata::ttype::TypeMetadata;
+use mago_codex::ttype::TType;
+use mago_codex::ttype::TypeRef;
+use mago_codex::ttype::atomic::TAtomic;
+use mago_codex::ttype::atomic::object::TObject;
+use mago_codex::ttype::atomic::object::named::TNamedObject;
 use mago_php_version::PHPVersion;
 use mago_php_version::feature::Feature;
 use mago_reporting::Annotation;
@@ -382,6 +388,201 @@ pub fn check_imprecise_property_type_hint<'arena, A>(
         let variable_name = BytesDisplay(variable_name);
         for &(type_name, span) in &imprecise {
             report_imprecise_type(context, type_name, span, &format!("property `{variable_name}`"));
+        }
+    }
+}
+
+/// Check whether a parameter's declared type names a generic class without template arguments.
+pub fn check_parameter_missing_template_parameters<A>(
+    context: &mut Context<'_, '_, A>,
+    function_like_metadata: &FunctionLikeMetadata,
+    parameter_index: usize,
+) where
+    A: Arena,
+{
+    if !should_check_missing_template_parameters(context, function_like_metadata) {
+        return;
+    }
+
+    let Some(parameter_metadata) = function_like_metadata.parameters.get(parameter_index) else {
+        return;
+    };
+
+    let Some(type_metadata) = parameter_metadata.type_metadata.as_ref() else {
+        return;
+    };
+
+    let parameter_name = parameter_metadata.name.0;
+
+    check_type_for_missing_template_parameters(context, type_metadata, &format!("parameter `{parameter_name}`"));
+}
+
+/// Check whether a function's declared return type names a generic class without template arguments.
+pub fn check_return_missing_template_parameters<A>(
+    context: &mut Context<'_, '_, A>,
+    function_like_metadata: &FunctionLikeMetadata,
+    function_name: &[u8],
+) where
+    A: Arena,
+{
+    if !should_check_missing_template_parameters(context, function_like_metadata) {
+        return;
+    }
+
+    let Some(type_metadata) = function_like_metadata.return_type_metadata.as_ref() else {
+        return;
+    };
+
+    let function_name = BytesDisplay(function_name);
+
+    check_type_for_missing_template_parameters(context, type_metadata, &format!("return type of `{function_name}`"));
+}
+
+/// Check whether a property's declared type names a generic class without template arguments.
+pub fn check_property_missing_template_parameters<A>(
+    context: &mut Context<'_, '_, A>,
+    property_metadata: Option<&PropertyMetadata>,
+) where
+    A: Arena,
+{
+    if !context.settings.check_missing_type_hints {
+        return;
+    }
+
+    let Some(property_metadata) = property_metadata else {
+        return;
+    };
+
+    let Some(type_metadata) = property_metadata.type_metadata.as_ref() else {
+        return;
+    };
+
+    let property_name = property_metadata.name.0;
+
+    check_type_for_missing_template_parameters(context, type_metadata, &format!("property `{property_name}`"));
+}
+
+/// Shared gating for the template-argument checks on function-like declarations.
+fn should_check_missing_template_parameters<A>(
+    context: &Context<'_, '_, A>,
+    function_like_metadata: &FunctionLikeMetadata,
+) -> bool
+where
+    A: Arena,
+{
+    if !context.settings.check_missing_type_hints {
+        return false;
+    }
+
+    match function_like_metadata.kind {
+        FunctionLikeKind::Closure => context.settings.check_closure_missing_type_hints,
+        FunctionLikeKind::ArrowFunction => context.settings.check_arrow_function_missing_type_hints,
+        _ => true,
+    }
+}
+
+/// Report every generic class-like named by `type_metadata` that was written without template
+/// arguments.
+///
+/// This is the type-hint-position counterpart to the `extends`/`implements`/`use` check in
+/// `statement::class_like`: `ArrayObject $items` silently means `ArrayObject<mixed, mixed>`, which
+/// hides the very type errors the analyzer exists to find. PHPStan reports the same shape under
+/// `missingType.generics`.
+fn check_type_for_missing_template_parameters<A>(
+    context: &mut Context<'_, '_, A>,
+    type_metadata: &TypeMetadata,
+    location: &str,
+) where
+    A: Arena,
+{
+    // Inferred types were never written down, so there is nothing for the user to annotate.
+    if type_metadata.inferred {
+        return;
+    }
+
+    let codebase = context.codebase;
+    let mut pending: Vec<(&'static str, String, Vec<String>, Option<Span>)> = vec![];
+    let mut seen: Vec<&[u8]> = vec![];
+
+    for type_ref in type_metadata.type_union.get_all_child_nodes() {
+        let TypeRef::Atomic(TAtomic::Object(TObject::Named(named_object))) = type_ref else {
+            continue;
+        };
+
+        // `static` and `$this` carry the template arguments of the enclosing instance.
+        if named_object.is_static || named_object.is_this || !is_missing_template_arguments(named_object) {
+            continue;
+        }
+
+        let name = named_object.name.as_bytes();
+        if seen.contains(&name) {
+            continue;
+        }
+
+        let Some(class_like_metadata) = codebase.get_class_like(name) else {
+            continue;
+        };
+
+        // Only report when at least one template parameter has no default; a fully defaulted
+        // generic is usable bare, and the inheritance check draws the same line.
+        if class_like_metadata.template_types.values().all(|template| template.default.is_some()) {
+            continue;
+        }
+
+        seen.push(name);
+        pending.push((
+            class_like_metadata.kind.as_str(),
+            class_like_metadata.original_name.to_string(),
+            class_like_metadata.template_types.keys().map(ToString::to_string).collect(),
+            class_like_metadata.name_span,
+        ));
+    }
+
+    for (kind, name, template_names, definition_span) in pending {
+        let count = template_names.len();
+        let template_list =
+            template_names.iter().map(|template| format!("`{template}`")).collect::<Vec<_>>().join(", ");
+        let implied = template_names.iter().map(|_| "mixed").collect::<Vec<_>>().join(", ");
+
+        let mut issue = Issue::warning(format!(
+            "Generic {kind} `{name}` in {location} does not specify its template types: {template_list}."
+        ))
+        .with_annotation(
+            Annotation::primary(type_metadata.span)
+                .with_message(format!("`{name}` is used here without template arguments")),
+        );
+
+        if let Some(definition_span) = definition_span {
+            issue = issue.with_annotation(
+                Annotation::secondary(definition_span)
+                    .with_message(format!("`{name}` is declared with {count} template parameter(s)")),
+            );
+        }
+
+        context.collector.report_with_code(
+            IssueCode::MissingTemplateParameter,
+            issue
+                .with_note(format!(
+                    "Omitting the template arguments is equivalent to `{name}<{implied}>`, so the analyzer cannot verify the types flowing through it."
+                ))
+                .with_help(format!(
+                    "Specify the template arguments in a docblock annotation, e.g. `{name}<{template_list_plain}>`.",
+                    template_list_plain = template_names.join(", ")
+                )),
+        );
+    }
+}
+
+/// A named object is missing its template arguments when none were written.
+///
+/// `Iterator`, `IteratorAggregate`, `Traversable` and `Generator` are auto-filled with `mixed`
+/// defaults when written bare, so the arguments are present but flagged as template defaults;
+/// treat those as missing too.
+fn is_missing_template_arguments(named_object: &TNamedObject) -> bool {
+    match named_object.get_type_parameters() {
+        None => true,
+        Some(type_parameters) => {
+            type_parameters.is_empty() || type_parameters.iter().all(|parameter| parameter.from_template_default())
         }
     }
 }

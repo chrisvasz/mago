@@ -187,6 +187,12 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for Closure<'arena> {
                 parameter,
                 i,
             );
+
+            crate::utils::missing_type_hints::check_parameter_missing_template_parameters(
+                context,
+                function_metadata,
+                i,
+            );
         }
 
         crate::utils::missing_type_hints::check_imprecise_return_type_hint(
@@ -194,6 +200,12 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for Closure<'arena> {
             function_metadata,
             b"closure",
             self.return_type_hint.as_ref(),
+        );
+
+        crate::utils::missing_type_hints::check_return_missing_template_parameters(
+            context,
+            function_metadata,
+            b"closure",
         );
 
         let inferred_parameter_types = artifacts.inferred_parameter_types.take();
