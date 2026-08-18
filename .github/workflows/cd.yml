@@ -139,6 +139,11 @@ jobs:
     name: ${{ matrix.job.target }} (${{ matrix.job.os }})
     runs-on: ${{ matrix.job.os }}
     needs: crate_metadata
+    # A successful release finishes end to end in ~45 minutes, so this is a
+    # generous ceiling that only trips on a genuinely stuck leg. Without it a
+    # hung target rides the 6-hour default and leaves the whole run sitting
+    # in_progress, which also blocks `docker` below.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -474,7 +479,19 @@ jobs:
     name: Build and push container image
     runs-on: ubuntu-latest
     needs: [crate_metadata, build]
-    if: startsWith(github.ref, 'refs/tags/')
+    # Deliberately not gated on `build` succeeding as a whole. This job uses
+    # exactly two of its artifacts -- x86_64/aarch64-unknown-linux-musl -- but a
+    # plain `needs:` makes any of the 15 targets able to skip the container
+    # image, including tier-3 ones it never consumes. In 1.47.1 that is what
+    # happened: armv7-unknown-linux-gnueabihf failed and
+    # arm-unknown-linux-musleabihf hung, while both musl targets had succeeded,
+    # and no image was published.
+    #
+    # The `download-artifact` steps below already encode the real dependency, so
+    # let them be the gate: if either musl target is missing this job fails with
+    # a clear error instead of silently disappearing. `!cancelled()` rather than
+    # `always()` so cancelling a run still stops it.
+    if: ${{ !cancelled() && needs.crate_metadata.result == 'success' && startsWith(github.ref, 'refs/tags/') }}
     permissions:
       packages: write
     steps:
