@@ -1019,6 +1019,8 @@ test_case!(scalars_cast_float_to_int);
 test_case!(scalars_cast_int_to_bool);
 test_case!(scalars_cast_int_to_float);
 test_case!(scalars_cast_int_to_string);
+test_case!(scalars_cast_mixed_to_int);
+test_case!(scalars_cast_mixed_to_string);
 test_case!(scalars_cast_string_to_int);
 test_case!(scalars_chained_arith);
 test_case!(scalars_chained_comparison);

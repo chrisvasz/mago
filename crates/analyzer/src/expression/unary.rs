@@ -320,6 +320,10 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for UnaryPrefix<'arena> {
                         // if t.is_int() {
                         //     report_redundant_type_cast(&self.operator, self, &t, context);
                         // }
+                        if t.has_mixed() {
+                            report_mixed_type_cast(context, self, "int");
+                        }
+
                         cast_type_to_int(&t, context)
                     }
                     None => get_int(),
@@ -390,6 +394,10 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for UnaryPrefix<'arena> {
                     Some(t) => {
                         if t.is_any_string() {
                             report_redundant_type_cast(&self.operator, self, &t, context);
+                        }
+
+                        if t.has_mixed() {
+                            report_mixed_type_cast(context, self, "string");
                         }
 
                         let operand_expression_id = get_block_expression_id(self.operand, context, block_context);
@@ -979,6 +987,34 @@ fn report_redundant_type_cast<'ast, 'arena, A>(
             // For `(string)$var`, delete `(string)` and keep `$var`
             edits.push(TextEdit::delete(expression.operator.span()));
         },
+    );
+}
+
+/// Reports an explicit cast of a `mixed` value to `int` or `string`.
+///
+/// `cast_type_to_array`, `cast_type_to_bool`, and `cast_type_to_float` report this from within their
+/// atomic walk. `(int)` and `(string)` are reported here, at the cast operator, because
+/// `cast_type_to_int` is a pure type computation with no collector access, and `cast_type_to_string`
+/// is shared with string interpolation, where casting `mixed` is a distinct case.
+fn report_mixed_type_cast<'arena, A>(
+    context: &mut Context<'_, 'arena, A>,
+    expression: &UnaryPrefix<'arena>,
+    target_type: &'static str,
+) where
+    A: Arena,
+{
+    context.collector.report_with_code(
+        IssueCode::InvalidTypeCast,
+        Issue::warning(format!("Casting `mixed` to `{target_type}`."))
+            .with_annotation(
+                Annotation::primary(expression.operand.span()).with_message("This expression has type `mixed`"),
+            )
+            .with_note(format!(
+                "The value of `mixed` cannot be determined statically; the result will be a general `{target_type}`."
+            ))
+            .with_help(format!(
+                "Consider adding type assertions or checks if a more specific `{target_type}` outcome is expected."
+            )),
     );
 }
 

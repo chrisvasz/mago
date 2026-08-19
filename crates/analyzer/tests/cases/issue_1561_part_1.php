@@ -10,8 +10,10 @@ function kind_human_value(array $meta, mixed $value): string
     $kind = $meta['kind'];
     $fn = "kind_human_value_{$kind}";
     if (!function_exists($fn)) {
+        /** @mago-expect analysis:invalid-type-cast */
         return (string) $value;
     }
 
+    /** @mago-expect analysis:invalid-type-cast */
     return (string) $fn($meta, $value);
 }
