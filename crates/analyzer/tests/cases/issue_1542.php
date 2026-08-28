@@ -40,12 +40,14 @@ function get_array_ignore_null(): ?array
 $o = get_array_or_false();
 /** @mago-expect analysis:possibly-false-array-access */
 /** @mago-expect analysis:possibly-undefined-string-array-index */
+/** @mago-expect analysis:invalid-type-cast */
 echo (string) $o['type'];
 
 // possibly-null-array-access: $n can be null
 $n = get_array_or_null();
 /** @mago-expect analysis:possibly-null-array-access */
 /** @mago-expect analysis:possibly-undefined-string-array-index */
+/** @mago-expect analysis:invalid-type-cast */
 echo (string) $n['type'];
 
 // ignore-falsable-return: should NOT emit possibly-false-array-access

@@ -305,6 +305,7 @@ mod tests {
         "#},
         issues = [
             IssueCode::UndefinedVariable,
+            IssueCode::InvalidTypeCast, // the undefined variable is `mixed`
         ]
     }
 
