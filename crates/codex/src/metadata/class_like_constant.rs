@@ -25,6 +25,13 @@ pub struct ClassLikeConstantMetadata {
     pub inferred_type: Option<TAtomic>,
     pub flags: MetadataFlags,
     pub version_constraint: VersionConstraint,
+
+    /// The free-form text following the `@deprecated` tag (or the `message:` argument of a
+    /// `#[\Deprecated]` attribute), e.g. `use NEW_C` for `@deprecated use NEW_C`.
+    ///
+    /// Only meaningful when [`MetadataFlags::DEPRECATED`] is set; `None` when the deprecation
+    /// carries no explanation.
+    pub deprecation_message: Option<Word>,
 }
 
 impl ClassLikeConstantMetadata {
@@ -40,6 +47,7 @@ impl ClassLikeConstantMetadata {
             inferred_type: None,
             flags,
             version_constraint: VersionConstraint::unconstrained(),
+            deprecation_message: None,
         }
     }
 
