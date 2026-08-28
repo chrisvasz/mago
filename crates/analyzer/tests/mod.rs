@@ -820,6 +820,7 @@ test_case!(unused_function_template_parameter);
 test_case!(unused_method);
 test_case!(unused_property);
 test_case!(unused_edge_cases);
+test_case!(void_result_used);
 test_case!(uninitialized_property);
 test_case!(property_hooks);
 test_case!(interface_property_hook);

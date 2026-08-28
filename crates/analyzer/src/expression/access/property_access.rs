@@ -754,6 +754,7 @@ mod tests {
             echo $result->property;
         "},
         issues = [
+            IssueCode::VoidResultUsed,
             IssueCode::NullPropertyAccess,
         ]
     }

@@ -13,7 +13,7 @@ function g(int $n): string
 {
     $ok = match ($n) {
         0 => true,
-        default => namespace\say_hello(),
+        default => namespace\say_hello(), // @mago-expect analysis:void-result-used
     };
 
     if ($ok) {
