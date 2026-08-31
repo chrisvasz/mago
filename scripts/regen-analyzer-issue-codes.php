@@ -85,6 +85,7 @@ final class AnalyzerCodeModuleGenerator
         'missing-return-statement',
         'mixed-property-type-coercion',
         'no-value',
+        'void-result-used',
         'non-existent-class',
         'non-existent-class-like',
         'non-existent-constant',

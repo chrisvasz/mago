@@ -118,6 +118,63 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for Call<'arena> {
     }
 }
 
+/// Reports a call to a function or method declared to return `void` whose result the
+/// surrounding code consumes as a value.
+///
+/// A `void` call produces nothing, so every such use reads `null` regardless of what the
+/// callee does. The consuming context only notices when it happens to be type-constrained
+/// (`invalid-argument`, `invalid-operand`, ...); contexts that accept `mixed`, or impose no
+/// constraint at all, let the `void` through silently. Reporting on the producer covers both.
+fn report_used_void_result<A>(
+    context: &mut Context<'_, '_, A>,
+    invocation_targets: &[InvocationTarget<'_>],
+    call_span: Span,
+) where
+    A: Arena,
+{
+    // A call whose result is thrown away - `foo();` as a statement, or a `for` clause - is
+    // exactly how a `void` function is meant to be called.
+    if context.is_value_discarded(call_span) {
+        return;
+    }
+
+    // With several candidate targets the call only certainly yields `void` if all of them do.
+    let Some(target) = invocation_targets.first().filter(|_| {
+        invocation_targets.iter().all(|target| {
+            let InvocationTarget::FunctionLike { metadata, inferred_return_type, .. } = target else {
+                return false;
+            };
+
+            // Only a return type the author wrote down is trustworthy here: an inferred `void`
+            // may just be a gap in inference, and reporting on it would make that a false positive.
+            inferred_return_type.is_none()
+                && metadata
+                    .return_type_metadata
+                    .as_ref()
+                    .is_some_and(|return_type| !return_type.inferred && return_type.type_union.is_void())
+        })
+    }) else {
+        return;
+    };
+
+    let target_kind = target.guess_kind();
+    let target_name = target.guess_name(context);
+
+    context.collector.report_with_code(
+        IssueCode::VoidResultUsed,
+        Issue::error(format!("Result of {target_kind} `{target_name}` is used, but it returns `void`."))
+            .with_annotation(
+                Annotation::primary(call_span).with_message("This call produces no value, yet its result is used"),
+            )
+            .with_note(format!(
+                "`{target_name}` is declared to return `void`, so the call evaluates to `null` no matter what the {target_kind} does."
+            ))
+            .with_help(
+                "Use a value-returning call here, or move this call to its own statement and drop the result.",
+            ),
+    );
+}
+
 fn analyze_invocation_targets<'ctx, 'ast, 'arena, A>(
     context: &mut Context<'ctx, 'arena, A>,
     block_context: &mut BlockContext<'ctx>,
@@ -160,6 +217,10 @@ where
 
             (metadata.flags.is_pure() || metadata.flags.is_mutation_free()) && !metadata.flags.suspends_fiber()
         });
+
+    if !encountered_invalid_targets && !encountered_mixed_targets {
+        report_used_void_result(context, &invocation_targets, call_span);
+    }
 
     let mut resulting_type = None;
     let mut all_targets_non_nullable_return = !invocation_targets.is_empty();
