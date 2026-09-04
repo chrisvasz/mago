@@ -68,6 +68,7 @@ use crate::statement::attributes::analyze_attributes;
 use crate::statement::class_like::property::analyze_property_hook;
 use crate::statement::r#return::handle_return_value;
 use crate::utils::expression::get_variable_id;
+use crate::utils::template_arity::report_template_arity_mismatches;
 
 pub mod function;
 pub mod unused_parameter;
@@ -178,6 +179,12 @@ where
 
     if let Some(return_type) = &function_like_metadata.return_type_metadata {
         report_undefined_type_references(context, return_type);
+        report_template_arity_mismatches(
+            context,
+            return_type,
+            block_context.scope.get_class_like_name(),
+            "the return type",
+        );
 
         // Only check native declaration if effective type is from docblock (to avoid duplicates)
         if return_type.from_docblock
@@ -368,6 +375,12 @@ where
 
         if let Some(parameter_type) = parameter_metadata.get_type_metadata() {
             report_undefined_type_references(context, parameter_type);
+            report_template_arity_mismatches(
+                context,
+                parameter_type,
+                block_context.scope.get_class_like_name(),
+                &format!("parameter `{parameter_variable_str}`"),
+            );
 
             // Only check native declaration if effective type is from docblock (to avoid duplicates)
             if parameter_type.from_docblock
