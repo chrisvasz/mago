@@ -13,6 +13,29 @@ use crate::metadata::attribute::AttributeMetadata;
 use crate::scanner::Context;
 use crate::scanner::inference::infer;
 
+/// Looks for a `#[\Deprecated]` attribute among `attributes`.
+///
+/// The outer `Option` reports whether the attribute is present at all; the inner one carries
+/// its `message:` argument, which is optional and only recoverable when written as a literal
+/// string.
+#[inline]
+#[must_use]
+pub fn find_deprecated_attribute(attributes: &[AttributeMetadata]) -> Option<Option<Word>> {
+    let attribute =
+        attributes.iter().find(|attribute| attribute.name.as_bytes().eq_ignore_ascii_case(b"Deprecated"))?;
+
+    let message = attribute
+        .arguments
+        .iter()
+        .find(|argument| argument.name.is_none_or(|name| name.as_bytes().eq_ignore_ascii_case(b"message")))
+        .and_then(|argument| argument.value_type.as_ref())
+        .and_then(|value_type| value_type.get_single_literal_string_value())
+        .filter(|value| !value.is_empty())
+        .map(word);
+
+    Some(message)
+}
+
 #[inline]
 pub fn scan_attribute_lists<'arena, A>(
     attribute_lists: &'arena Sequence<'arena, AttributeList<'arena>>,
