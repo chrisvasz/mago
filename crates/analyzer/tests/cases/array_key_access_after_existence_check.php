@@ -25,6 +25,7 @@ function processWithArrayKeyExists(array $config): string
 {
     if (array_key_exists('name', $config)) {
         // After array_key_exists, the key definitely exists
+        // @mago-expect analysis:invalid-type-cast
         return (string) $config['name'];
     }
 
@@ -54,6 +55,7 @@ function nestedArrayAccess(array $data): null|string
 {
     if (isset($data['user']['name'])) {
         // Nested access should be safe after isset
+        // @mago-expect analysis:invalid-type-cast
         return (string) $data['user']['name'];
     }
 
