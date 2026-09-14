@@ -65,6 +65,7 @@ use crate::statement::attributes::analyze_class_like_attributes;
 use crate::statement::class_like::method_signature::SignatureCompatibilityIssue;
 use crate::statement::function_like::report_undefined_type_references;
 use crate::utils::missing_type_hints;
+use crate::utils::template_arity::report_template_arity_mismatches;
 
 pub mod constant;
 pub mod enum_case;
@@ -1085,6 +1086,12 @@ where
                         && let Some(type_meta) = &prop_meta.type_metadata
                     {
                         report_undefined_type_references(context, type_meta);
+                        report_template_arity_mismatches(
+                            context,
+                            type_meta,
+                            Some(class_like_metadata.name),
+                            &format!("property `{property_name}`"),
+                        );
 
                         if type_meta.from_docblock
                             && let Some(type_decl_meta) = &prop_meta.type_declaration_metadata
