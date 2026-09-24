@@ -21,7 +21,12 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for For<'arena> {
     {
         let infinite_loop = self.initializations.is_empty() && self.conditions.is_empty() && self.increments.is_empty();
 
-        r#loop::analyze_for_or_while_loop(
+        let depth = context.value_discarding_depth();
+        for expression in self.initializations.iter().chain(self.increments.iter()) {
+            context.register_value_discarding_expression(expression);
+        }
+
+        let result = r#loop::analyze_for_or_while_loop(
             context,
             block_context,
             artifacts,
@@ -31,7 +36,11 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for For<'arena> {
             self.body.statements(),
             self.span(),
             infinite_loop,
-        )
+        );
+
+        context.restore_value_discarding_depth(depth);
+
+        result
     }
 }
 
