@@ -405,6 +405,9 @@ mod tests {
             IssueCode::PossiblyUndefinedVariable, // $key
             IssueCode::PossiblyUndefinedVariable, // $value
             IssueCode::PossiblyUndefinedVariable, // $y
+            IssueCode::InvalidTypeCast, // (string) $key, possibly undefined, so `mixed`
+            IssueCode::InvalidTypeCast, // (string) $value, possibly undefined, so `mixed`
+            IssueCode::InvalidTypeCast, // (string) $y, possibly undefined, so `mixed`
         ]
     }
 
