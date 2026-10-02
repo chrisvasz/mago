@@ -3,6 +3,8 @@ use mago_codex::metadata::class_like::ClassLikeMetadata;
 use mago_codex::metadata::function_like::FunctionLikeKind;
 use mago_codex::metadata::function_like::FunctionLikeMetadata;
 use mago_codex::metadata::property::PropertyMetadata;
+use mago_codex::metadata::ttype::TypeMetadata;
+use mago_database::file::File;
 use mago_php_version::PHPVersion;
 use mago_php_version::feature::Feature;
 use mago_reporting::Annotation;
@@ -18,6 +20,10 @@ use mago_syntax::cst::Property;
 use crate::code::IssueCode;
 use crate::context::Context;
 use mago_bytes::BytesDisplay;
+
+/// The bare hints that carry no key or value information, spelled as they are reported.
+const IMPRECISE_ARRAY: &str = "array";
+const IMPRECISE_ITERABLE: &str = "iterable";
 
 /// Check if a constant is missing a type hint and whether it's safe to add one.
 ///
@@ -257,12 +263,11 @@ pub fn check_imprecise_return_type_hint<'arena, A>(
         return;
     };
 
-    if function_like_metadata.return_type_metadata.as_ref().is_some_and(|m| m.from_docblock) {
-        return;
-    }
+    let imprecise =
+        collect_imprecise_hints(context, &return_type_hint.hint, function_like_metadata.return_type_metadata.as_ref());
 
     let function_name = BytesDisplay(function_name);
-    for (type_name, span) in collect_imprecise_hints(&return_type_hint.hint) {
+    for (type_name, span) in imprecise {
         report_imprecise_type(context, type_name, span, &format!("return type of `{function_name}`"));
     }
 }
@@ -297,15 +302,14 @@ pub fn check_imprecise_parameter_type_hint<'arena, A>(
         return;
     };
 
-    // If the docblock provides a more specific type, skip
-    if let Some(param_meta) = function_like_metadata.parameters.get(parameter_index)
-        && param_meta.type_metadata.as_ref().is_some_and(|m| m.from_docblock)
-    {
-        return;
-    }
+    let imprecise = collect_imprecise_hints(
+        context,
+        hint,
+        function_like_metadata.parameters.get(parameter_index).and_then(|param_meta| param_meta.type_metadata.as_ref()),
+    );
 
     let parameter_name = BytesDisplay(parameter.variable.name);
-    for (type_name, span) in collect_imprecise_hints(hint) {
+    for (type_name, span) in imprecise {
         report_imprecise_type(context, type_name, span, &format!("parameter `{parameter_name}`"));
     }
 }
@@ -327,14 +331,11 @@ pub fn check_imprecise_property_type_hint<'arena, A>(
         return;
     };
 
-    // If the docblock provides a more specific type, skip
-    if let Some(prop_meta) = property_metadata
-        && prop_meta.type_metadata.as_ref().is_some_and(|m| m.from_docblock)
-    {
-        return;
-    }
-
-    let imprecise = collect_imprecise_hints(hint);
+    let imprecise = collect_imprecise_hints(
+        context,
+        hint,
+        property_metadata.and_then(|prop_meta| prop_meta.type_metadata.as_ref()),
+    );
     if imprecise.is_empty() {
         return;
     }
@@ -349,19 +350,70 @@ pub fn check_imprecise_property_type_hint<'arena, A>(
 
 /// Collect all bare `array` or `iterable` hints from a type hint, recursing into
 /// unions, intersections, nullable, and parenthesized types.
-fn collect_imprecise_hints(hint: &Hint<'_>) -> Vec<(&'static str, Span)> {
+///
+/// `type_metadata` is the type recorded for the same position, which may come from a
+/// docblock. A docblock silences the hint only when it is genuinely more specific than
+/// the hint it annotates; see [`docblock_type_is_more_precise`].
+fn collect_imprecise_hints<A>(
+    context: &Context<'_, '_, A>,
+    hint: &Hint<'_>,
+    type_metadata: Option<&TypeMetadata>,
+) -> Vec<(&'static str, Span)>
+where
+    A: Arena,
+{
+    if type_metadata.is_some_and(|metadata| metadata.from_docblock && docblock_type_is_more_precise(context, metadata))
+    {
+        return vec![];
+    }
+
     let mut results = vec![];
     collect_imprecise_hints_inner(hint, &mut results);
     results
 }
 
+/// Check whether a docblock type says more than the bare `array` or `iterable` hint it
+/// annotates.
+///
+/// `@param array $a` restates the native hint verbatim and conveys nothing extra, so it
+/// must not silence the report. `@param array<string, int> $a` and `@param list<Foo> $a`
+/// do add key and value information, as does spelling the equivalent out explicitly with
+/// `array<array-key, mixed>`, which is what the report itself suggests.
+fn docblock_type_is_more_precise<A>(context: &Context<'_, '_, A>, type_metadata: &TypeMetadata) -> bool
+where
+    A: Arena,
+{
+    let Some(declaration) = get_source_text(context.source_file, type_metadata.span) else {
+        // The annotation was written somewhere we cannot read, such as an inherited
+        // docblock in another file; assume it was deliberate.
+        return true;
+    };
+
+    !declaration.split(|byte| matches!(byte, b'|' | b'&')).any(|member| {
+        let member = member.trim_ascii();
+        let member = member.strip_prefix(b"?").unwrap_or(member).trim_ascii_start();
+
+        member.eq_ignore_ascii_case(IMPRECISE_ARRAY.as_bytes())
+            || member.eq_ignore_ascii_case(IMPRECISE_ITERABLE.as_bytes())
+    })
+}
+
+/// Return the bytes `span` covers, or `None` when it does not point into `file`.
+fn get_source_text(file: &File, span: Span) -> Option<&[u8]> {
+    if file.id != span.file_id {
+        return None;
+    }
+
+    file.contents.get(span.start.offset as usize..span.end.offset as usize)
+}
+
 fn collect_imprecise_hints_inner(hint: &Hint<'_>, results: &mut Vec<(&'static str, Span)>) {
     match hint {
         Hint::Array(keyword) => {
-            results.push(("array", keyword.span()));
+            results.push((IMPRECISE_ARRAY, keyword.span()));
         }
         Hint::Iterable(identifier) => {
-            results.push(("iterable", identifier.span()));
+            results.push((IMPRECISE_ITERABLE, identifier.span()));
         }
         Hint::Nullable(nullable) => {
             collect_imprecise_hints_inner(nullable.hint, results);
@@ -386,7 +438,7 @@ where
     A: Arena,
 {
     // `iterable` can have any key type (not just array-key), since iterators support arbitrary keys.
-    let equivalent = if type_name == "iterable" { "iterable<mixed, mixed>" } else { "array<array-key, mixed>" };
+    let equivalent = if type_name == IMPRECISE_ITERABLE { "iterable<mixed, mixed>" } else { "array<array-key, mixed>" };
 
     context.collector.report_with_code(
         IssueCode::ImpreciseType,
