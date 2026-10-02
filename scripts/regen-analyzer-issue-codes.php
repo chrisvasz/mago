@@ -250,6 +250,7 @@ final class AnalyzerCodeModuleGenerator
         'missing-required-interface',
         'missing-required-parent',
         'missing-template-parameter',
+        'missing-template-type',
         'excess-template-parameter',
         'inconsistent-template',
         'invalid-template-parameter',
