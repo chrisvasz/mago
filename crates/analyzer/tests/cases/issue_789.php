@@ -6,6 +6,10 @@ function returns_void(): void
 {
 }
 
-if (returns_void()) { // @mago-expect analysis:impossible-condition
+/**
+ * @mago-expect analysis:void-result-used
+ * @mago-expect analysis:impossible-condition
+ */
+if (returns_void()) {
     echo 1;
 }
