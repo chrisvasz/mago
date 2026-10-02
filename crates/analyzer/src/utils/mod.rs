@@ -9,6 +9,7 @@ use crate::context::Context;
 pub mod availability;
 pub mod casing;
 pub mod conditional;
+pub mod deprecation;
 pub mod docblock;
 pub mod experimental;
 pub mod expression;

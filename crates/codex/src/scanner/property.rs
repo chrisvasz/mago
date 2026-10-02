@@ -23,6 +23,7 @@ use crate::scanner::Context;
 use crate::scanner::attribute::scan_attribute_lists;
 use crate::scanner::docblock::HookParamTag;
 use crate::scanner::docblock::apply_common_metadata_flag;
+use crate::scanner::docblock::deprecation_message_from_tag_value;
 use crate::scanner::docblock::find_most_trusted_tag;
 use crate::scanner::docblock::parse_docblock;
 use crate::scanner::inference::infer;
@@ -568,6 +569,12 @@ fn update_property_metadata_from_docblock(
 ) {
     for tag in document.tags() {
         if apply_common_metadata_flag(&mut property_metadata.flags, &tag.value) {
+            // `@deprecated` re-states the notice and `@not-deprecated` retracts it; either way the
+            // docblock supersedes whatever an attribute recorded.
+            if matches!(tag.value, TagValue::Deprecated(_) | TagValue::NotDeprecated(_)) {
+                property_metadata.deprecation_message = deprecation_message_from_tag_value(&tag.value);
+            }
+
             continue;
         }
 

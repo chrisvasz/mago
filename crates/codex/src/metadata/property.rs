@@ -2,6 +2,7 @@ use mago_php_version::PHPVersion;
 use mago_php_version::PHPVersionRange;
 
 use mago_span::Span;
+use mago_word::Word;
 use mago_word::WordMap;
 
 use crate::metadata::attribute::AttributeMetadata;
@@ -88,6 +89,13 @@ pub struct PropertyMetadata {
     /// `Mago\AvailableSince` / `Mago\AvailableUntil` attributes during
     /// scanning.
     pub version_constraint: VersionConstraint,
+
+    /// The free-form text following the `@deprecated` tag (or the `message:` argument of a
+    /// `#[\Deprecated]` attribute), e.g. `use NEW_C` for `@deprecated use NEW_C`.
+    ///
+    /// Only meaningful when [`MetadataFlags::DEPRECATED`] is set; `None` when the deprecation
+    /// carries no explanation.
+    pub deprecation_message: Option<Word>,
 }
 
 impl PropertyMetadata {
@@ -110,6 +118,7 @@ impl PropertyMetadata {
             attributes: Vec::new(),
             hooks: WordMap::default(),
             version_constraint: VersionConstraint::unconstrained(),
+            deprecation_message: None,
         }
     }
 
