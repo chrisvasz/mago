@@ -18,6 +18,7 @@ pub mod names;
 pub mod php_emulation;
 pub mod symbol_existence;
 pub mod template;
+pub mod template_arity;
 
 /// Generates a diff between two complex types if both are complex.
 ///

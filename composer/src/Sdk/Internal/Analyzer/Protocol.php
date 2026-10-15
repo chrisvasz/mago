@@ -365,7 +365,10 @@ final class Protocol
     }
 
     /**
-     * @param list<RegisteredTargetedCallback> $registrations
+     * @template TCallback of object
+     * @template TTarget
+     *
+     * @param list<RegisteredTargetedCallback<TCallback, TTarget>> $registrations
      */
     private static function writeTargetRegistrations(
         PayloadWriter $writer,
@@ -387,6 +390,12 @@ final class Protocol
         }
     }
 
+    /**
+     * @template TCallback of object
+     * @template TTarget
+     *
+     * @param RegisteredTargetedCallback<TCallback, TTarget> $registration
+     */
     private static function writeRegistrationHeader(
         PayloadWriter $writer,
         RegisteredTargetedCallback $registration,
