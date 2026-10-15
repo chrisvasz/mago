@@ -238,6 +238,13 @@ where
         return None;
     }
 
+    crate::utils::deprecation::check_property_deprecation(
+        context,
+        property_metadata,
+        &format!("{}::{}", declaring_class_metadata.original_name, property_name),
+        variable.span(),
+    );
+
     if !check_static_property_read_visibility(
         context,
         block_context,

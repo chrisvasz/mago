@@ -54,6 +54,7 @@ macro_rules! test_case {
 }
 
 test_case!(accessing_undefined_class_constant);
+test_case!(attribute_deprecated_class_constant);
 test_case!(attribute_target_constant);
 test_case!(attribute_target_constant_php84, {
     let mut settings = default_test_settings();
@@ -352,8 +353,10 @@ test_case!(docblock_closure_type);
 test_case!(docblock_callable_type);
 test_case!(docblock_callable_optional_param);
 test_case!(docblock_callable_variadic);
+test_case!(docblock_deprecated_class_constant);
 test_case!(docblock_deprecated_function);
 test_case!(docblock_deprecated_method);
+test_case!(docblock_deprecated_property);
 test_case!(docblock_template_constraint_array_key);
 test_case!(docblock_template_constraint_object);
 test_case!(template_default_class_no_args);
