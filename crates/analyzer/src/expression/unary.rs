@@ -333,7 +333,7 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for UnaryPrefix<'arena> {
                         // if t.is_int() {
                         //     report_redundant_type_cast(&self.operator, self, &t, context);
                         // }
-                        cast_type_to_int(&t, self.operand, artifacts, context)
+                        cast_type_to_int(&t, artifacts, context, self)
                     }
                     None => get_int(),
                 };
@@ -1514,18 +1514,18 @@ impl NumericInterval {
     }
 }
 
-fn cast_type_to_int<A>(
+fn cast_type_to_int<'arena, A>(
     operand_type: &TUnion,
-    operand: &Expression<'_>,
     artifacts: &AnalysisArtifacts,
-    context: &Context<'_, '_, A>,
+    context: &mut Context<'_, 'arena, A>,
+    cast_expression: &UnaryPrefix<'arena>,
 ) -> TUnion
 where
     A: Arena,
 {
     if operand_type.has_float()
         && let Some(integer) =
-            NumericInterval::from_expression(operand, artifacts).and_then(NumericInterval::into_integer)
+            NumericInterval::from_expression(cast_expression.operand, artifacts).and_then(NumericInterval::into_integer)
     {
         return TUnion::from_atomic(TAtomic::Scalar(TScalar::Integer(integer)));
     }
@@ -1594,6 +1594,24 @@ where
                     return get_int();
                 }
             },
+            TAtomic::Mixed(_) => {
+                context.collector.report_with_code(
+                    IssueCode::InvalidTypeCast,
+                    Issue::warning("Casting `mixed` to `int`.".to_string())
+                        .with_annotation(
+                            Annotation::primary(cast_expression.operand.span())
+                                .with_message("This expression has type `mixed`"),
+                        )
+                        .with_note(
+                            "The integer value of `mixed` cannot be determined statically. The result will be a general `int`.",
+                        )
+                        .with_help(
+                            "Consider adding type assertions or checks if a more specific integer outcome is expected.",
+                        ),
+                );
+
+                return get_int();
+            }
             _ => return get_int(),
         };
 
@@ -1940,6 +1958,24 @@ where
             TAtomic::Null | TAtomic::Void => possibilities.push(TAtomic::Scalar(TScalar::literal_string(word("")))),
             TAtomic::Resource(_) => possibilities.push(TAtomic::Scalar(TScalar::non_empty_string())),
             TAtomic::Never => {}
+            TAtomic::Mixed(_) => {
+                context.collector.report_with_code(
+                    IssueCode::InvalidTypeCast,
+                    Issue::warning("Casting `mixed` to `string`.".to_string())
+                        .with_annotation(
+                            Annotation::primary(expression_span.span())
+                                .with_message("This expression has type `mixed`"),
+                        )
+                        .with_note(
+                            "The string representation of `mixed` cannot be determined statically; at runtime the value could be an array, a resource, or an object without `__toString()`.",
+                        )
+                        .with_help(
+                            "Ensure the value is a string, a number, `null`, `false`, or a `Stringable` object before converting it.",
+                        ),
+                );
+
+                possibilities.push(TAtomic::Scalar(TScalar::string()));
+            }
             _ => {
                 if let Some(result) = find_to_string_in_intersections(
                     t,
