@@ -649,6 +649,8 @@ test_case!(match_expression);
 test_case!(match_arm_reaching);
 test_case!(missing_constructor);
 test_case!(missing_property_type, crate::framework::check_missing_type_hints_settings());
+test_case!(template_arity_in_signatures, crate::framework::check_missing_type_hints_settings());
+test_case!(template_arity_in_signatures_off);
 test_case!(property_initialization);
 test_case!(docblock_declared_members_undefined_types);
 test_case!(parent_constructor_init);
