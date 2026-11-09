@@ -292,6 +292,7 @@ final class Summary
                 $sum['Pays de publication'] = ($st->issnpaysid > 0 ? '' : 'SANS ') . $name;
             }
         }
+        // @mago-expect analysis:invalid-type-cast
         $getName = static fn(object $ar): string => (string) ($ar->nom ?? '');
         if ($st->editeurId) {
             $ids = array_map(abs(...), $st->editeurId);
