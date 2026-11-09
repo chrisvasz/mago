@@ -963,6 +963,12 @@ where
         &property_display_name,
         selector.span(),
     );
+    crate::utils::deprecation::check_property_deprecation(
+        context,
+        property_metadata,
+        &property_display_name,
+        selector.span(),
+    );
 
     // For assignment, use set hook parameter type when not accessing backing store directly
     let mut used_set_hook_param = false;

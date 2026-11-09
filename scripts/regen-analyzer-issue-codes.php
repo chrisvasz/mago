@@ -269,6 +269,8 @@ final class AnalyzerCodeModuleGenerator
         'possibly-invalid-property-write',
         'invalid-property-read',
         'deprecated-constant',
+        'deprecated-class-constant',
+        'deprecated-property',
         'invalid-enum-case-value',
         'duplicate-enum-case-value',
         'condition-is-too-complex',
