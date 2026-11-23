@@ -273,6 +273,7 @@ class ValidHookParamTypes
     // OK: set hook param is mixed (accepts anything)
     public int $mixed {
         set(mixed $v) {
+            // @mago-expect analysis:invalid-type-cast
             $this->mixed = (int) $v;
         }
     }

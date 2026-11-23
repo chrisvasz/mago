@@ -10,4 +10,5 @@ function callables_maybe_call(mixed $val): mixed
     return null;
 }
 
+// @mago-expect analysis:invalid-type-cast
 echo (string) callables_maybe_call('strlen');

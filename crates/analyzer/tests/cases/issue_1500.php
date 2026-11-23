@@ -11,6 +11,7 @@ function list_to_csv(array $a): string
         if (is_numeric($k)) {
             $r .= $k; // Invalid type `numeric` for right operand in string concatenation.
         } else {
+            // @mago-expect analysis:invalid-type-cast
             $r .= "'" . htmlspecialchars((string) $k, ENT_QUOTES) . "'";
         }
     }
