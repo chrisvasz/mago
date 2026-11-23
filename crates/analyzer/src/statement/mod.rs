@@ -175,7 +175,14 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for Statement<'arena> {
             Statement::Block(block) => {
                 analyze_statements(block.statements.as_slice(), context, block_context, artifacts)
             }
-            Statement::Expression(expression) => expression.expression.analyze(context, block_context, artifacts),
+            Statement::Expression(expression) => {
+                let depth = context.value_discarding_depth();
+                context.register_value_discarding_expression(expression.expression);
+                let result = expression.expression.analyze(context, block_context, artifacts);
+                context.restore_value_discarding_depth(depth);
+
+                result
+            }
             Statement::Try(r#try) => r#try.analyze(context, block_context, artifacts),
             Statement::Foreach(foreach) => foreach.analyze(context, block_context, artifacts),
             Statement::For(r#for) => r#for.analyze(context, block_context, artifacts),

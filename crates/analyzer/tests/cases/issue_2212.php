@@ -26,6 +26,7 @@ final class MissingInterface implements Vendor\Unresolvable\Contract
         /** @mago-expect analysis:invalid-argument */
         takesString(1);
 
+        // @mago-expect analysis:void-result-used
         $this->unknownMethod(takesString('argument is still analyzed'));
         takesMixed($this->unknownProperty);
         self::unknownStaticMethod();
@@ -110,12 +111,18 @@ final class TransitiveTraitUser
     }
 }
 
-/** @mago-expect analysis:invalid-argument */
+/**
+ * @mago-expect analysis:void-result-used
+ * @mago-expect analysis:invalid-argument
+ */
 new MissingParent(takesString(6));
 
 /** @mago-expect analysis:non-existent-class-like */
 $anonymous = new class(
-    /** @mago-expect analysis:invalid-argument */
+    /**
+     * @mago-expect analysis:void-result-used
+     * @mago-expect analysis:invalid-argument
+     */
     takesString(7),
 ) extends Vendor\Unresolvable\AnonymousBase {
     /** @mago-expect analysis:invalid-argument */

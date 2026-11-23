@@ -19,6 +19,7 @@ use mago_reporting::IssueCollection;
 use mago_span::HasSpan;
 use mago_span::Span;
 use mago_syntax::comments::docblock::PrecedingDocblocks;
+use mago_syntax::cst::Expression;
 use mago_syntax::cst::Identifier;
 use mago_syntax::cst::Trivia;
 
@@ -58,6 +59,15 @@ where
     pub(super) external_analysis_session: Option<&'ctx ExternalAnalysisSession>,
     pub(super) additional_symbol_references: Option<&'ctx SymbolReferences>,
     class_initializers: WordMap<WordSet>,
+    /// Spans of the expressions whose value the language throws away, such as the
+    /// expression of an expression statement or a `for` initializer/increment.
+    ///
+    /// Analysis is a recursive descent, so an enclosing construct registers the
+    /// expression it is about to discard before descending into it, and unregisters
+    /// it afterwards. Checks that only make sense for a value that is actually
+    /// consumed - such as [`IssueCode::VoidResultUsed`] - consult this via
+    /// [`Context::is_value_discarded`].
+    value_discarding_expressions: Vec<Span>,
 }
 
 impl<'ctx, 'arena, A> Context<'ctx, 'arena, A>
@@ -92,7 +102,62 @@ where
             external_analysis_session,
             additional_symbol_references,
             class_initializers: WordMap::default(),
+            value_discarding_expressions: Vec::new(),
         }
+    }
+
+    /// Returns the current number of registered value-discarding expressions, to be
+    /// handed back to [`Context::restore_value_discarding_depth`] once the enclosing
+    /// construct has been analyzed.
+    pub(crate) fn value_discarding_depth(&self) -> usize {
+        self.value_discarding_expressions.len()
+    }
+
+    /// Registers `expression` as having its value discarded.
+    ///
+    /// The sub-expressions that merely supply `expression`'s value are discarded along
+    /// with it, and are registered too. That covers the constructs PHP code routinely
+    /// uses as statements for their side effects alone: `match (true) { $c => act() };`,
+    /// `$c ? act() : otherwise();`, and `$c || act();`.
+    pub(crate) fn register_value_discarding_expression(&mut self, expression: &Expression<'arena>) {
+        self.value_discarding_expressions.push(expression.span());
+
+        match expression {
+            Expression::Parenthesized(parenthesized) => {
+                self.register_value_discarding_expression(parenthesized.expression);
+            }
+            Expression::UnaryPrefix(unary) if unary.operator.is_error_control() => {
+                self.register_value_discarding_expression(unary.operand);
+            }
+            Expression::Match(r#match) => {
+                for arm in r#match.arms.iter() {
+                    self.register_value_discarding_expression(arm.expression());
+                }
+            }
+            Expression::Conditional(conditional) => {
+                if let Some(then) = conditional.then {
+                    self.register_value_discarding_expression(then);
+                }
+
+                self.register_value_discarding_expression(conditional.r#else);
+            }
+            // The left operand of these is still read, to decide whether to evaluate the right one.
+            Expression::Binary(binary) if binary.operator.is_logical() || binary.operator.is_null_coalesce() => {
+                self.register_value_discarding_expression(binary.rhs);
+            }
+            _ => {}
+        }
+    }
+
+    /// Drops every expression registered since `depth` was taken.
+    pub(crate) fn restore_value_discarding_depth(&mut self, depth: usize) {
+        self.value_discarding_expressions.truncate(depth);
+    }
+
+    /// Returns `true` if the expression at `span` has its value discarded by the
+    /// construct that encloses it, rather than consumed as a value.
+    pub(crate) fn is_value_discarded(&self, span: Span) -> bool {
+        self.value_discarding_expressions.contains(&span)
     }
 
     pub(crate) fn prepare_class_initializers(

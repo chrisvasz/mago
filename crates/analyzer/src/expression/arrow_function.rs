@@ -114,6 +114,20 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for ArrowFunction<'arena> {
             self.return_type_hint.as_ref(),
         );
 
+        // An arrow function body is an implicit `return`, so its value is normally consumed.
+        // It is not when the arrow function returns `void`, nor when it has no declared return
+        // type at all: `fn() => act()` is how a `Closure(): void` is written, and reporting the
+        // body's value as used there would be a false positive.
+        let body_value_is_discarded = function_metadata
+            .return_type_metadata
+            .as_ref()
+            .is_none_or(|return_type| return_type.inferred || return_type.type_union.is_void());
+
+        let value_discarding_depth = context.value_discarding_depth();
+        if body_value_is_discarded {
+            context.register_value_discarding_expression(self.expression);
+        }
+
         let inferred_parameter_types = artifacts.inferred_parameter_types.take();
         let inner_artifacts = analyze_function_like(
             context,
@@ -124,6 +138,8 @@ impl<'ast, 'arena> Analyzable<'ast, 'arena> for ArrowFunction<'arena> {
             FunctionLikeBody::Expression(self.expression),
             inferred_parameter_types,
         )?;
+
+        context.restore_value_discarding_depth(value_discarding_depth);
 
         let resulting_closure = resolve_closure_like_type(
             context,
