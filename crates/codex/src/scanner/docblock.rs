@@ -6,6 +6,8 @@ use mago_phpdoc_syntax::cst::ParamTagValue;
 use mago_phpdoc_syntax::cst::Tag;
 use mago_phpdoc_syntax::cst::TagValue;
 use mago_phpdoc_syntax::cst::TagVendor;
+use mago_phpdoc_syntax::cst::Text;
+use mago_phpdoc_syntax::cst::TextSegment;
 use mago_phpdoc_syntax::cst::TypelessParamTagValue;
 use mago_phpdoc_syntax::cst::r#type::Type;
 use mago_span::HasSpan;
@@ -88,6 +90,45 @@ pub fn apply_common_metadata_flag(flags: &mut MetadataFlags, value: &TagValue<'_
     }
 
     true
+}
+
+/// Extracts the free-form description of a `@deprecated` tag, e.g. the `use bar()`
+/// in `@deprecated use bar()`.
+///
+/// Returns `None` for any other tag, and for a `@deprecated` carrying no description.
+#[inline]
+#[must_use]
+pub fn deprecation_message_from_tag_value(value: &TagValue<'_>) -> Option<Word> {
+    match value {
+        TagValue::Deprecated(deprecated) => flatten_text(&deprecated.description),
+        _ => None,
+    }
+}
+
+/// Joins a docblock text run into a single whitespace-normalized [`Word`].
+///
+/// Inline tags such as `{@see Foo}` are skipped; inline code keeps its contents.
+/// Returns `None` when nothing printable remains.
+#[must_use]
+pub fn flatten_text(text: &Text<'_>) -> Option<Word> {
+    let mut buffer: Vec<u8> = Vec::new();
+    for segment in text.segments {
+        let bytes = match segment {
+            TextSegment::PlainText(plain) => plain.value,
+            TextSegment::InlineCode(code) => code.value,
+            TextSegment::InlineTag(_) => continue,
+        };
+
+        for chunk in bytes.split(u8::is_ascii_whitespace).filter(|chunk| !chunk.is_empty()) {
+            if !buffer.is_empty() {
+                buffer.push(b' ');
+            }
+
+            buffer.extend_from_slice(chunk);
+        }
+    }
+
+    if buffer.is_empty() { None } else { Some(word(buffer)) }
 }
 
 pub fn for_each_tag_by_ascending_trust<'arena>(

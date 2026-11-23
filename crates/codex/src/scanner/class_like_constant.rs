@@ -14,8 +14,10 @@ use crate::metadata::class_like::ClassLikeMetadata;
 use crate::metadata::class_like_constant::ClassLikeConstantMetadata;
 use crate::metadata::flags::MetadataFlags;
 use crate::scanner::Context;
+use crate::scanner::attribute::find_deprecated_attribute;
 use crate::scanner::attribute::scan_attribute_lists;
 use crate::scanner::docblock::apply_common_metadata_flag;
+use crate::scanner::docblock::deprecation_message_from_tag_value;
 use crate::scanner::docblock::find_most_trusted_tag;
 use crate::scanner::docblock::parse_docblock;
 use crate::scanner::inference::infer;
@@ -83,6 +85,13 @@ where
             meta.attributes.clone_from(&attributes);
             meta.inferred_type = infer(context, scope, item.value, classname).map(TUnion::get_single_owned);
 
+            // `#[\Deprecated]` targets class constants since PHP 8.4; the docblock loop below
+            // can still override this with `@not-deprecated`.
+            if let Some(message) = find_deprecated_attribute(&meta.attributes) {
+                meta.flags |= MetadataFlags::DEPRECATED;
+                meta.deprecation_message = message;
+            }
+
             if let Some(TAtomic::Reference(TReference::Member {
                 class_like_name,
                 member_selector: TReferenceMemberSelector::Identifier(member_name),
@@ -96,6 +105,12 @@ where
             if let Some(document) = document.as_ref() {
                 for tag in document.tags() {
                     if apply_common_metadata_flag(&mut meta.flags, &tag.value) {
+                        // `@deprecated` re-states the notice and `@not-deprecated` retracts it; either way the
+                        // docblock supersedes whatever an attribute recorded.
+                        if matches!(tag.value, TagValue::Deprecated(_) | TagValue::NotDeprecated(_)) {
+                            meta.deprecation_message = deprecation_message_from_tag_value(&tag.value);
+                        }
+
                         continue;
                     }
 
