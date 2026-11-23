@@ -38,6 +38,7 @@ use crate::statement::function_like::add_properties_to_context;
 use crate::statement::function_like::get_this_type;
 use crate::statement::function_like::report_undefined_type_references;
 use crate::statement::r#return::handle_return_value;
+use crate::utils::template_arity::report_template_arity_mismatches;
 
 impl<'ast, 'arena> Analyzable<'ast, 'arena> for Property<'arena> {
     fn analyze<'ctx, A>(
@@ -247,6 +248,12 @@ where
             && let Some(param_type) = param.get_type_metadata()
         {
             report_undefined_type_references(context, param_type);
+            report_template_arity_mismatches(
+                context,
+                param_type,
+                Some(class_like.name),
+                &format!("parameter `{}`", param.get_name().0),
+            );
 
             // Only check native declaration if effective type is from docblock
             if param_type.from_docblock
